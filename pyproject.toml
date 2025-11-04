@@ -1,0 +1,22 @@
+[project]
+name = "mapa-conhecimento"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Daniel da Rosa",email = "danieldrster@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests (>=2.32.5,<3.0.0)",
+    "streamlit (>=1.51.0,<2.0.0)",
+    "pandas (>=2.3.3,<3.0.0)",
+    "openpyxl (>=3.1.5,<4.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "mapa_conhecimento", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
