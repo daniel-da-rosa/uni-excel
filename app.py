@@ -10,6 +10,7 @@ st.markdown("---")
 
 # ==========================================================
 # 🛑 MUDANÇA ESSENCIAL: INJEÇÃO DE CSS PARA TRADUÇÃO DO WIDGET
+# (Mantida)
 # ==========================================================
 
 st.markdown("""
@@ -61,73 +62,84 @@ uploaded_files = st.file_uploader(
     "📂 **Faça o Upload dos Arquivos Excel (.xlsx)**", 
     type=["xlsx"],
     accept_multiple_files=True,
-    key="file_uploader_custom" # Adicione um key, é sempre bom para widgets
+    key="file_uploader_custom"
 )
 
 # Constante para as colunas
 COLUNAS_SELECIONADAS = 'A:E'
+NOME_ABA_FINAL = "Geral"
 
 # Verifica se há arquivos e adiciona o botão de compilação
 if uploaded_files:
-    # ... (O restante do seu código de compilação continua o mesmo) ...
-    if st.button(f"Compilar Colunas {COLUNAS_SELECIONADAS} da Última Aba"):
+    if st.button(f"Gerar arquivo Excel único com aba {NOME_ABA_FINAL}'"):
         st.info("Iniciando a compilação dos arquivos...")
 
-        # 3. Inicializa o buffer de memória
-        output = BytesIO()
+        all_dfs = [] 
 
         try:
-            # Inicia o escritor do Excel
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Itera sobre cada arquivo enviado para extrair os DataFrames
+            for file in uploaded_files:
+                
+                file.seek(0)
+                
+                # 1. Obter o nome da última aba
+                with pd.ExcelFile(file, engine='openpyxl') as xls:
+                    sheet_names = xls.sheet_names
 
-                # Itera sobre cada arquivo enviado
-                for file in uploaded_files:
-                    
-                    # CORREÇÃO CRÍTICA 1: Resetar o ponteiro antes de inspecionar
-                    file.seek(0)
-                    
-                    # 1. Obter o nome da última aba
-                    with pd.ExcelFile(file, engine='openpyxl') as xls:
-                        sheet_names = xls.sheet_names
+                if not sheet_names:
+                    st.warning(f"⚠️ Arquivo '{file.name}' ignorado: Não foram encontradas planilhas.")
+                    continue 
 
-                    if not sheet_names:
-                        st.warning(f"⚠️ Arquivo '{file.name}' ignorado: Não foram encontradas planilhas.")
-                        continue 
+                last_sheet_name = sheet_names[-1]
 
-                    last_sheet_name = sheet_names[-1]
+                file.seek(0)
 
-                    # CORREÇÃO CRÍTICA 2: Resetar o ponteiro ANTES de ler os dados
-                    file.seek(0)
+                # 2. LER APENAS A ÚLTIMA PLANILHA E AS COLUNAS A:E
+                # *** ALTERAÇÃO CRÍTICA AQUI: header=None para evitar o problema de nomes de coluna inconsistentes (Unnamed). ***
+                df = pd.read_excel(
+                    file, 
+                    sheet_name=last_sheet_name, 
+                    usecols=COLUNAS_SELECIONADAS, 
+                    header=None,  # <--- ESSA É A CHAVE
+                    engine='openpyxl'
+                )
+                
+                # O DataFrame agora terá colunas 0, 1, 2, 3, 4
+                all_dfs.append(df)
+                st.success(f"✅ Arquivo '{file.name}' - Colunas {COLUNAS_SELECIONADAS} da aba '{last_sheet_name}' lidas com sucesso. (Ignorando cabeçalho original)")
+            
+            # --- SEÇÃO DE CONCATENAÇÃO E ESCRITA ---
 
-                    # 2. Ler apenas a última planilha e SOMENTE as colunas A a E
-                    df = pd.read_excel(
-                        file, 
-                        sheet_name=last_sheet_name, 
-                        usecols=COLUNAS_SELECIONADAS, 
-                        engine='openpyxl'
-                    )
+            if all_dfs:
+                st.info(f"Concatenando {len(all_dfs)} Planilhas...")
+                
+                # Concatena todos os DataFrames (agora todos com colunas 0, 1, 2, 3, 4)
+                df_final = pd.concat(all_dfs, ignore_index=True)
 
-                    # O nome da aba de destino no arquivo compilado
-                    base_name = file.name.replace(".xlsx", "")
-                    sheet_name_output = f"{base_name} ({last_sheet_name})"[:31]
+                # 3. Inicializa o buffer de memória
+                output = BytesIO()
 
-                    # Escreve o DataFrame como uma nova aba
-                    df.to_excel(writer, sheet_name=sheet_name_output, index=False)
-                    st.success(f"✅ Arquivo '{file.name}' - Colunas {COLUNAS_SELECIONADAS} da aba '{last_sheet_name}' compiladas em '{sheet_name_output}'")
-                    
+                # Inicia o escritor do Excel
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    # Escreve o DataFrame FINAL na aba "Geral"
+                    # O index=False é essencial
+                    # O header=False aqui garante que colunas 0, 1, 2, 3, 4 NÃO sejam escritas como a primeira linha.
+                    df_final.to_excel(writer, sheet_name=NOME_ABA_FINAL, index=False, header=False) # <--- NOVIDADE: header=False na escrita
+                
+                # 4. Move o ponteiro para o início para o download
+                output.seek(0)
+
+                st.success(f"🎉 Compilação concluída! Todos os arquivos foram unificados! '{NOME_ABA_FINAL}'. Faça o download abaixo:")
+
+                # 5. BOTÃO DE DOWNLOAD
+                st.download_button(
+                    label="Baixar Arquivo Excel Compilado",
+                    data=output,
+                    file_name="Arquivos_Compilados.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            else:
+                st.warning("Nenhum dado válido foi encontrado ou todos os arquivos foram ignorados.")
 
         except Exception as e:
             st.error(f"❌ Erro ao processar o arquivo(s): {e}")
-
-        # 4. Move o ponteiro para o início para o download
-        output.seek(0)
-
-        st.success("🎉 Compilação concluída! Faça o download abaixo:")
-
-        # 5. BOTÃO DE DOWNLOAD
-        st.download_button(
-            label="Baixar Arquivo Excel Compilado",
-            data=output,
-            file_name="Arquivos_Compilados_A_E.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
